@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  mail-temp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mail-temp
+    restart: always
+    environment:
+      # 域名配置
+      - MAIL_DOMAIN=moncn.cn
+      
+      # Web服务配置
+      - WEB_PORT=8080
+      - DEBUG_MODE=true
+      
+      # Ollama API配置 - 按优先级排序尝试不同的连接方式
+      - OLLAMA_API_URL=http://172.17.0.1:11434/api/generate  # Docker默认网桥IP
+      # - OLLAMA_API_URL=http://host.docker.internal:11434/api/generate  # Docker访问宿主机
+      # - OLLAMA_API_URL=http://moncn.cn:11434/api/generate  # 外部域名
+    ports:
+      - "25:25"   # SMTP服务端口
+      - "7015:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # 添加宿主机映射
+    network_mode: "bridge"  # 明确指定网络模式
+    volumes:
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+
+networks:
+  default:
+    driver: bridge 

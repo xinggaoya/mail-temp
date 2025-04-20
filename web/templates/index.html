@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.2.47/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    {{- /* 让Go模板引擎忽略后面的内容 */ -}}
+    {{- /* 使用 `define` 和 `template` 来包装Vue代码部分 */ -}}
+    {{ define "vue-app" }}
+    <div id="app">
+        <header>
+            <div class="container">
+                <div class="logo">
+                    <h1>临时邮箱</h1>
+                    <span>验证码接收服务</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="container">
+            <div class="email-box">
+                <div class="email-controls">
+                    <div class="email-address" v-if="currentEmail">
+                        <span class="email-text">{{ "{{" }} currentEmail {{ "}}" }}</span>
+                        <button @click="copyEmail" class="btn-copy">复制</button>
+                    </div>
+                    <div class="email-buttons">
+                        <button @click="generateEmail" class="btn btn-primary">生成新邮箱</button>
+                        <button @click="refreshMessages" class="btn btn-secondary" :disabled="!currentEmail">刷新</button>
+                    </div>
+                </div>
+
+                <div class="email-content" v-if="currentEmail">
+                    <div class="email-header">
+                        <h3>收件箱</h3>
+                        <span class="email-count">{{ "{{" }} messages.length {{ "}}" }} 封邮件</span>
+                    </div>
+
+                    <div class="message-list" v-if="messages.length > 0">
+                        <div v-for="(message, index) in messages" :key="index" class="message-item">
+                            <div class="message-header">
+                                <div class="message-from">发件人: {{ "{{" }} message.from {{ "}}" }}</div>
+                                <div class="message-time">{{ "{{" }} formatTime(message.timestamp) {{ "}}" }}</div>
+                            </div>
+                            <div class="message-subject">主题: {{ "{{" }} message.subject {{ "}}" }}</div>
+                            <div class="verification-code" v-if="message.code">
+                                <span>验证码:</span>
+                                <strong>{{ "{{" }} message.code {{ "}}" }}</strong>
+                                <button @click="copyCode(message.code)" class="btn-copy-code">复制</button>
+                            </div>
+                            <div class="message-body">{{ "{{" }} message.body {{ "}}" }}</div>
+                        </div>
+                    </div>
+                    <div class="no-messages" v-else>
+                        <p>暂无邮件，请等待接收...</p>
+                        <div class="loading-spinner"></div>
+                    </div>
+                </div>
+
+                <div class="email-intro" v-else>
+                    <h2>欢迎使用临时邮箱</h2>
+                    <p>点击"生成新邮箱"按钮，获取一个临时邮箱地址用于接收验证码。</p>
+                    <p>所有邮箱地址仅在本次会话中有效，刷新页面后将自动清除。</p>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <div class="container">
+                <p>&copy; 2023 临时邮箱服务 - 安全、便捷的验证码接收工具</p>
+            </div>
+        </footer>
+
+        <div class="toast" :class="{ 'show': toast.show }">
+            {{ "{{" }} toast.message {{ "}}" }}
+        </div>
+    </div>
+    {{ end }}
+    
+    {{ template "vue-app" . }}
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html> 

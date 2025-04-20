@@ -1,0 +1,10 @@
+.git
+.gitignore
+.idea
+.dockerignore
+docker-compose.yml
+Dockerfile
+README.md
+*.md
+nginx/
+vendor/ 
