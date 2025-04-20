@@ -10,6 +10,7 @@ import (
 	"mail-temp/config"
 	"mail-temp/internal/email"
 	"mail-temp/internal/handler"
+	"mail-temp/internal/repository"
 )
 
 //TIP <p>To run your code, right-click the code and select <b>Run</b>.</p> <p>Alternatively, click
@@ -32,11 +33,18 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	// 创建存储
+	storage, closeStorage, err := repository.NewStorage(cfg)
+	if err != nil {
+		log.Fatalf("创建存储失败: %v", err)
+	}
+	defer closeStorage()
+
 	// 创建邮箱生成器
-	emailGenerator := email.NewEmailGenerator(cfg.MailDomain)
+	emailGenerator := email.NewEmailGenerator(cfg.MailDomain, storage)
 
 	// 创建邮件接收器
-	emailReceiver, err := email.NewEmailReceiver(cfg, emailGenerator)
+	emailReceiver, err := email.NewEmailReceiver(cfg, emailGenerator, storage)
 	if err != nil {
 		log.Fatalf("创建邮件接收器失败: %v", err)
 	}

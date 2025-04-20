@@ -14,20 +14,29 @@ type Config struct {
 	WebPort   int
 	DebugMode bool
 
+	// SMTP服务配置
+	SMTPPort int
+
 	// Ollama API配置
 	OllamaAPIURL string
+
+	// Redis配置
+	RedisURL string
 }
 
 // LoadConfig 从环境变量加载配置
 func LoadConfig() (*Config, error) {
 	webPort, _ := strconv.Atoi(getEnv("WEB_PORT", "8080"))
 	debugMode, _ := strconv.ParseBool(getEnv("DEBUG_MODE", "false"))
+	smtpPort, _ := strconv.Atoi(getEnv("SMTP_PORT", "25"))
 
 	return &Config{
 		MailDomain:   getEnv("MAIL_DOMAIN", "example.com"),
 		WebPort:      webPort,
 		DebugMode:    debugMode,
+		SMTPPort:     smtpPort,
 		OllamaAPIURL: getEnv("OLLAMA_API_URL", ""),
+		RedisURL:     getEnv("REDIS_URL", ""),
 	}, nil
 }
 

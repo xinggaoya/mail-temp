@@ -77,6 +77,12 @@ func (h *APIHandler) GetMessages(c *gin.Context) {
 func (h *APIHandler) ListEmails(c *gin.Context) {
 	emails := h.emailGenerator.GetActiveEmails()
 
+	// 限制只返回最新的15条邮箱
+	maxEmails := 15
+	if len(emails) > maxEmails {
+		emails = emails[:maxEmails]
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"status": "success",
 		"count":  len(emails),

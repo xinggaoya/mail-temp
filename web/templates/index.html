@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/vue@3.2.47/dist/vue.global.prod.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
     {{- /* 让Go模板引擎忽略后面的内容 */ -}}
@@ -16,8 +17,11 @@
         <header>
             <div class="container">
                 <div class="logo">
-                    <h1>临时邮箱</h1>
-                    <span>验证码接收服务</span>
+                    <div class="logo-icon"><i class="fas fa-envelope"></i></div>
+                    <div class="logo-text">
+                        <h1>临时邮箱<span class="highlight">Pro</span></h1>
+                        <div class="tagline"><span class="tag-icon"><i class="fas fa-shield-alt"></i></span> 安全高效的验证码接收服务</div>
+                    </div>
                 </div>
             </div>
         </header>
@@ -30,30 +34,41 @@
                         <button @click="copyEmail" class="btn-copy">复制</button>
                     </div>
                     <div class="email-buttons">
-                        <button @click="generateEmail" class="btn btn-primary">生成新邮箱</button>
-                        <button @click="refreshMessages" class="btn btn-secondary" :disabled="!currentEmail">刷新</button>
+                        <button @click="generateEmail" class="btn btn-primary"><i class="fas fa-plus-circle"></i> 生成新邮箱</button>
+                        <button @click="refreshMessages" class="btn btn-secondary" :disabled="!currentEmail"><i class="fas fa-sync-alt"></i> 刷新</button>
+                        <button @click="showActiveEmails" class="btn btn-info"><i class="fas fa-list"></i> 活跃邮箱</button>
                     </div>
                 </div>
 
                 <div class="email-content" v-if="currentEmail">
                     <div class="email-header">
-                        <h3>收件箱</h3>
+                        <h3><i class="fas fa-inbox"></i> 收件箱</h3>
                         <span class="email-count">{{ "{{" }} messages.length {{ "}}" }} 封邮件</span>
                     </div>
 
-                    <div class="message-list" v-if="messages.length > 0">
-                        <div v-for="(message, index) in messages" :key="index" class="message-item">
+                    <div class="loading-container" v-if="isLoading">
+                        <div class="loading-spinner"></div>
+                        <p>正在加载邮件...</p>
+                    </div>
+
+                    <div class="message-list" v-else-if="messages.length > 0">
+                        <div v-for="(message, index) in messages" :key="index" class="message-item" :class="{'single-message': messages.length === 1}">
                             <div class="message-header">
                                 <div class="message-from">发件人: {{ "{{" }} message.from {{ "}}" }}</div>
                                 <div class="message-time">{{ "{{" }} formatTime(message.timestamp) {{ "}}" }}</div>
                             </div>
-                            <div class="message-subject">主题: {{ "{{" }} message.subject {{ "}}" }}</div>
-                            <div class="verification-code" v-if="message.code">
-                                <span>验证码:</span>
-                                <strong>{{ "{{" }} message.code {{ "}}" }}</strong>
+                            <div class="message-subject">主题: {{ "{{" }} decodeEmailSubject(message.subject) {{ "}}" }}</div>
+                            <div v-if="message.code" class="verification-code-display">
+                                <span>验证码: <strong>{{ "{{" }} message.code {{ "}}" }}</strong></span>
                                 <button @click="copyCode(message.code)" class="btn-copy-code">复制</button>
                             </div>
-                            <div class="message-body">{{ "{{" }} message.body {{ "}}" }}</div>
+                            <div class="message-body">
+                                <div v-if="message.htmlContent" class="message-content html-content" v-html="processHtmlContent(message.htmlContent)"></div>
+                                <div v-else class="message-content">{{ "{{" }} message.body {{ "}}" }}</div>
+                                <div v-if="shouldShowScrollHint(message.body)" class="message-metadata-hint">
+                                    <i class="fas fa-info-circle"></i> 滚动查看更多内容
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="no-messages" v-else>
@@ -63,18 +78,41 @@
                 </div>
 
                 <div class="email-intro" v-else>
-                    <h2>欢迎使用临时邮箱</h2>
-                    <p>点击"生成新邮箱"按钮，获取一个临时邮箱地址用于接收验证码。</p>
-                    <p>所有邮箱地址仅在本次会话中有效，刷新页面后将自动清除。</p>
+                    <h2>欢迎使用临时邮箱<span class="highlight">Pro</span></h2>
+                    <p><i class="fas fa-info-circle"></i> 点击"生成新邮箱"按钮，获取一个临时邮箱地址用于接收验证码。</p>
+                    <p><i class="fas fa-clock"></i> 所有邮箱地址仅在本次会话中有效，刷新页面后将自动清除。</p>
+                    <p><i class="fas fa-list"></i> 您也可以点击"活跃邮箱"按钮查看当前可用的邮箱列表。</p>
                 </div>
             </div>
         </main>
 
-        <footer>
-            <div class="container">
-                <p>&copy; 2023 临时邮箱服务 - 安全、便捷的验证码接收工具</p>
+        <!-- 活跃邮箱列表弹窗 -->
+        <div class="modal" v-if="showEmailList" @click.self="closeEmailList">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3><i class="fas fa-list"></i> 活跃邮箱列表</h3>
+                    <button class="modal-close" @click="closeEmailList"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="modal-body">
+                    <div v-if="activeEmails.length > 0" class="active-emails-list">
+                        <div v-for="(email, index) in activeEmails" :key="index" class="active-email-item">
+                            <div class="active-email-text">{{ "{{" }} email {{ "}}" }}</div>
+                            <div class="active-email-actions">
+                                <button @click="selectEmail(email)" class="btn-select-email" title="选择此邮箱">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                                <button @click="deleteEmail(email)" class="btn-delete-email" title="删除此邮箱">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else class="no-active-emails">
+                        <p>当前没有活跃的临时邮箱</p>
+                    </div>
+                </div>
             </div>
-        </footer>
+        </div>
 
         <div class="toast" :class="{ 'show': toast.show }">
             {{ "{{" }} toast.message {{ "}}" }}

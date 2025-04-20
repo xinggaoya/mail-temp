@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,7 +28,7 @@ type SMTPServer struct {
 }
 
 // NewSMTPServer 创建一个新的SMTP服务器
-func NewSMTPServer(domain string, generator *EmailGenerator) *SMTPServer {
+func NewSMTPServer(domain string, port int, generator *EmailGenerator) *SMTPServer {
 	backend := &SMTPBackend{
 		generator:    generator,
 		mailReceived: make(chan *Mail, 100),
@@ -34,7 +36,7 @@ func NewSMTPServer(domain string, generator *EmailGenerator) *SMTPServer {
 
 	// 创建SMTP服务器
 	s := smtp.NewServer(backend)
-	s.Addr = ":25" // 标准SMTP端口
+	s.Addr = fmt.Sprintf(":%d", port) // 使用配置的端口
 	s.Domain = domain
 	s.ReadTimeout = 10 * time.Second
 	s.WriteTimeout = 10 * time.Second
@@ -55,8 +57,14 @@ func NewSMTPServer(domain string, generator *EmailGenerator) *SMTPServer {
 
 // Start 启动SMTP服务器
 func (s *SMTPServer) Start() error {
-	log.Println("SMTP服务器启动在端口25")
-	if err := s.server.ListenAndServe(); err != nil {
+	log.Printf("SMTP服务器启动在端口%s", s.server.Addr)
+	err := s.server.ListenAndServe()
+	if err != nil {
+		log.Printf("SMTP服务器启动失败: %v", err)
+		// 如果是权限问题（尤其在Windows下使用25端口），提供更明确的错误信息
+		if strings.Contains(err.Error(), "permission denied") || strings.Contains(err.Error(), "access denied") {
+			log.Printf("提示: 在Windows系统上使用25端口需要管理员权限，或者尝试使用其他端口（如2525）")
+		}
 		return err
 	}
 	return nil
@@ -79,7 +87,21 @@ type SMTPBackend struct {
 }
 
 // NewSession 实现smtp.Backend接口
-func (bkd *SMTPBackend) NewSession(c *smtp.Conn) (smtp.Session, error) {
+func (bkd *SMTPBackend) NewSession(c smtp.ConnectionState) (smtp.Session, error) {
+	return &SMTPSession{
+		backend: bkd,
+	}, nil
+}
+
+// Login 实现smtp.Backend接口
+func (bkd *SMTPBackend) Login(state *smtp.ConnectionState, username, password string) (smtp.Session, error) {
+	return &SMTPSession{
+		backend: bkd,
+	}, nil
+}
+
+// AnonymousLogin 实现smtp.Backend接口
+func (bkd *SMTPBackend) AnonymousLogin(state *smtp.ConnectionState) (smtp.Session, error) {
 	return &SMTPSession{
 		backend: bkd,
 	}, nil
@@ -99,7 +121,7 @@ func (s *SMTPSession) AuthPlain(username, password string) error {
 }
 
 // Mail 实现smtp.Session接口
-func (s *SMTPSession) Mail(from string, opts *smtp.MailOptions) error {
+func (s *SMTPSession) Mail(from string, opts smtp.MailOptions) error {
 	s.from = from
 	s.currentMail = &Mail{
 		From:      from,
@@ -109,7 +131,7 @@ func (s *SMTPSession) Mail(from string, opts *smtp.MailOptions) error {
 }
 
 // Rcpt 实现smtp.Session接口
-func (s *SMTPSession) Rcpt(to string, opts *smtp.RcptOptions) error {
+func (s *SMTPSession) Rcpt(to string) error {
 	// 检查是否是我们生成的邮箱
 	if !s.backend.generator.IsValidEmail(to) {
 		// 即使不是我们管理的邮箱，也假装接受
@@ -160,11 +182,17 @@ func extractVerificationCodeFallback(content string) string {
 		return matches[2]
 	}
 
-	// 尝试匹配任意4-8位数字，排除年份
-	codeRegex = regexp.MustCompile(`\b(?!20[2-3][0-9])\d{4,8}\b`)
-	if matches := codeRegex.FindStringSubmatch(content); len(matches) > 0 {
-		log.Printf("正则表达式提取到可能的验证码: %s", matches[0])
-		return matches[0]
+	// 尝试匹配任意4-8位数字，然后过滤年份（不使用前瞻断言）
+	codeRegex = regexp.MustCompile(`\b\d{4,8}\b`)
+	matches := codeRegex.FindAllString(content, -1)
+	for _, match := range matches {
+		// 如果是4位数字，检查是否是年份
+		if len(match) == 4 && match >= "2020" && match <= "2030" {
+			// 可能是年份，跳过
+			continue
+		}
+		log.Printf("正则表达式提取到可能的验证码: %s", match)
+		return match
 	}
 
 	return ""
@@ -300,13 +328,165 @@ func extractVerificationCode(content string) string {
 		return matches[1]
 	}
 
-	// 最后尝试匹配任意4-8位数字，但排除2023-2030等可能是年份的数字
-	codeRegex = regexp.MustCompile(`\b(?!20[2-3][0-9])\d{4,8}\b`)
-	if matches := codeRegex.FindStringSubmatch(content); len(matches) > 0 {
-		log.Printf("找到可能的验证码: %s", matches[0])
-		return matches[0]
+	// 最后尝试匹配任意4-8位数字，但排除可能是年份的数字
+	codeRegex = regexp.MustCompile(`\b\d{4,8}\b`)
+	matches := codeRegex.FindAllString(content, -1)
+	for _, match := range matches {
+		// 如果是4位数字，检查是否是年份
+		if len(match) == 4 && match >= "2020" && match <= "2030" {
+			// 可能是年份，跳过
+			continue
+		}
+		log.Printf("找到可能的验证码: %s", match)
+		return match
 	}
 
+	return ""
+}
+
+// 提取并解码邮件主题
+func decodeEmailSubject(subject string) string {
+	// 尝试解码Base64编码的UTF-8主题
+	b64Regex := regexp.MustCompile(`=\?utf-8\?B\?([a-zA-Z0-9+/=]+)\?=`)
+	if matches := b64Regex.FindStringSubmatch(subject); len(matches) > 1 {
+		decoded, err := base64.StdEncoding.DecodeString(matches[1])
+		if err == nil {
+			return string(decoded)
+		}
+	}
+
+	// 尝试解码Quoted-Printable编码的UTF-8主题
+	qpRegex := regexp.MustCompile(`=\?utf-8\?Q\?([^\?]+)\?=`)
+	if matches := qpRegex.FindStringSubmatch(subject); len(matches) > 1 {
+		// 替换下划线为空格（RFC 2047规定）
+		qpText := strings.ReplaceAll(matches[1], "_", " ")
+		// 解码Quoted-Printable
+		qpText = decodeQuotedPrintable(qpText)
+		return qpText
+	}
+
+	// 尝试解码Quoted-Printable编码的小写utf-8主题
+	qpLowerRegex := regexp.MustCompile(`=\?utf-8\?q\?([^\?]+)\?=`)
+	if matches := qpLowerRegex.FindStringSubmatch(subject); len(matches) > 1 {
+		// 替换下划线为空格（RFC 2047规定）
+		qpText := strings.ReplaceAll(matches[1], "_", " ")
+		// 解码Quoted-Printable
+		qpText = decodeQuotedPrintable(qpText)
+		return qpText
+	}
+
+	return subject
+}
+
+// 解析多部分邮件
+func parseMultipartMail(data string) (string, string, error) {
+	// 查找Content-Type及边界
+	contentTypeRegex := regexp.MustCompile(`Content-Type: multipart/.*boundary=(.+)`)
+	matches := contentTypeRegex.FindStringSubmatch(data)
+	if len(matches) < 2 {
+		return "", "", fmt.Errorf("未找到multipart边界")
+	}
+
+	// 获取边界值并处理可能的引号
+	boundary := strings.Trim(matches[1], `"' `)
+	log.Printf("找到multipart边界: %s", boundary)
+
+	// 使用边界分隔邮件部分
+	parts := strings.Split(data, "--"+boundary)
+
+	// 初始化HTML和纯文本内容
+	var plainText, htmlContent string
+
+	// 遍历各个部分，查找HTML和文本内容
+	for _, part := range parts {
+		if strings.Contains(part, "Content-Type: text/plain") {
+			plainText = extractPartContent(part)
+			if strings.Contains(part, "Content-Transfer-Encoding: quoted-printable") {
+				plainText = decodeQuotedPrintable(plainText)
+			} else if strings.Contains(part, "Content-Transfer-Encoding: base64") {
+				plainText = decodeBase64Content(plainText)
+			}
+		} else if strings.Contains(part, "Content-Type: text/html") {
+			htmlContent = extractPartContent(part)
+			if strings.Contains(part, "Content-Transfer-Encoding: quoted-printable") {
+				htmlContent = decodeQuotedPrintable(htmlContent)
+			} else if strings.Contains(part, "Content-Transfer-Encoding: base64") {
+				htmlContent = decodeBase64Content(htmlContent)
+			}
+			htmlContent = cleanHtmlContent(htmlContent)
+		}
+	}
+
+	return plainText, htmlContent, nil
+}
+
+// 从邮件部分中提取内容（移除头部）
+func extractPartContent(part string) string {
+	// 查找头部和内容分隔的空行
+	parts := strings.Split(part, "\r\n\r\n")
+	if len(parts) > 1 {
+		return strings.Join(parts[1:], "\r\n\r\n")
+	}
+	return part
+}
+
+// 解码Base64编码内容
+func decodeBase64Content(content string) string {
+	// 清理非Base64字符
+	cleanedBase64 := regexp.MustCompile(`[^A-Za-z0-9+/=]`).ReplaceAllString(content, "")
+	decoded, err := base64.StdEncoding.DecodeString(cleanedBase64)
+	if err != nil {
+		log.Printf("Base64解码失败: %v", err)
+		return content
+	}
+	return string(decoded)
+}
+
+// 解码Quoted-Printable编码内容
+func decodeQuotedPrintable(text string) string {
+	// 去除软换行
+	text = strings.ReplaceAll(text, "=\r\n", "")
+	text = strings.ReplaceAll(text, "=\n", "")
+
+	// 替换3D编码（常见问题）
+	text = strings.ReplaceAll(text, "=3D", "=")
+
+	// 解码所有形如=XX的十六进制编码
+	processed := regexp.MustCompile(`=([\dA-F]{2})`).ReplaceAllStringFunc(text, func(m string) string {
+		if len(m) < 3 {
+			return m
+		}
+		code, err := strconv.ParseUint(m[1:], 16, 8)
+		if err != nil {
+			return m
+		}
+		return string(rune(code))
+	})
+
+	return processed
+}
+
+// 清理HTML内容，修复常见问题
+func cleanHtmlContent(html string) string {
+	// 修复引号和属性
+	html = strings.ReplaceAll(html, "=3D", "=")
+	html = strings.ReplaceAll(html, "=22", "\"")
+	html = strings.ReplaceAll(html, "=27", "'")
+	html = strings.ReplaceAll(html, "=20", " ")
+
+	// 移除邮件客户端特有的标记
+	html = strings.ReplaceAll(html, "(MISSING)", "")
+
+	return html
+}
+
+// 提取邮件头部字段的通用函数
+func extractHeaderField(data, fieldName string) string {
+	pattern := fieldName + `: (.+)`
+	regex := regexp.MustCompile(pattern)
+	if matches := regex.FindStringSubmatch(data); len(matches) > 1 {
+		return strings.TrimSpace(matches[1])
+	}
 	return ""
 }
 
@@ -331,70 +511,108 @@ func (s *SMTPSession) Data(r io.Reader) error {
 	s.currentMail.Body = data
 
 	// 提取并解码邮件主题
-	subjectRegex := regexp.MustCompile(`Subject: =\?utf-8\?B\?([a-zA-Z0-9+/=]+)\?=`)
-	if matches := subjectRegex.FindStringSubmatch(data); len(matches) > 1 {
-		decoded, err := base64.StdEncoding.DecodeString(matches[1])
-		if err == nil {
-			s.currentMail.Subject = string(decoded)
-		}
-	} else {
-		plainSubjectRegex := regexp.MustCompile(`Subject: (.+)`)
-		if matches := plainSubjectRegex.FindStringSubmatch(data); len(matches) > 1 {
-			s.currentMail.Subject = strings.TrimSpace(matches[1])
-		}
+	if rawSubject := extractHeaderField(data, "Subject"); rawSubject != "" {
+		// 使用主题解码函数
+		s.currentMail.Subject = decodeEmailSubject(rawSubject)
+		log.Printf("原始主题: %s, 解码后: %s", rawSubject, s.currentMail.Subject)
 	}
 
-	// 提取邮件正文内容，优先Base64解码
-	var mailContent string
+	// 提取邮件正文内容
+	var plainText, htmlContent string
 
-	// 1. 尝试提取并解码Base64编码的纯文本部分
-	plainTextContent := ""
-	plainBase64Regex := regexp.MustCompile(`Content-Type: text/plain;[\s\S]*?Content-Transfer-Encoding: base64[\s\S]*?\r\n\r\n([a-zA-Z0-9+/=]+)`)
-	if matches := plainBase64Regex.FindStringSubmatch(data); len(matches) > 1 {
-		decoded, err := base64.StdEncoding.DecodeString(matches[1])
-		if err == nil {
-			plainTextContent = string(decoded)
-			mailContent += plainTextContent
-			log.Printf("解码Base64纯文本内容: %s", plainTextContent)
-		}
-	}
+	// 检查Content-Type头部
+	contentType := extractHeaderField(data, "Content-Type")
+	transferEncoding := extractHeaderField(data, "Content-Transfer-Encoding")
 
-	// 2. 尝试提取并解码Base64编码的HTML部分
-	htmlContent := ""
-	htmlBase64Regex := regexp.MustCompile(`Content-Type: text/html;[\s\S]*?Content-Transfer-Encoding: base64[\s\S]*?\r\n\r\n([a-zA-Z0-9+/=]+)`)
-	if matches := htmlBase64Regex.FindStringSubmatch(data); len(matches) > 1 {
-		decoded, err := base64.StdEncoding.DecodeString(matches[1])
-		if err == nil {
-			htmlContent = string(decoded)
-			mailContent += " " + htmlContent
-			log.Printf("解码Base64 HTML内容: %s", htmlContent)
-		}
-	}
+	log.Printf("邮件Content-Type: %s", contentType)
+	log.Printf("邮件Content-Transfer-Encoding: %s", transferEncoding)
 
-	// 3. 如果有解码内容，保存到邮件体中
-	if mailContent != "" {
-		s.currentMail.Body += "\n\n解码后内容:\n" + mailContent
-		log.Println("成功解码Base64内容")
-
-		// 使用AI从解码后的内容中提取验证码
-		s.currentMail.Code = extractCodeWithAI(mailContent)
-		if s.currentMail.Code != "" {
-			log.Printf("从解码内容中提取到验证码: %s", s.currentMail.Code)
+	// 判断是否是多部分邮件
+	if strings.Contains(contentType, "multipart/") {
+		// 处理多部分邮件
+		log.Println("检测到多部分邮件，开始解析...")
+		var err error
+		plainText, htmlContent, err = parseMultipartMail(data)
+		if err != nil {
+			log.Printf("解析多部分邮件失败: %v", err)
 		} else {
-			log.Println("无法从解码内容中提取验证码，尝试从原始内容提取")
+			log.Printf("成功解析多部分邮件，提取到HTML内容长度: %d", len(htmlContent))
+		}
+	} else if strings.Contains(contentType, "text/html") {
+		// 处理单一HTML邮件
+		// 尝试从正文中提取HTML内容
+		parts := strings.Split(data, "\r\n\r\n")
+		if len(parts) > 1 {
+			// 获取正文部分（跳过头部）
+			htmlContent = strings.Join(parts[1:], "\r\n\r\n")
+			log.Printf("从邮件正文中提取HTML内容，长度: %d", len(htmlContent))
 
-			// 如果从解码内容中无法提取验证码，则尝试从原始邮件中提取
-			s.currentMail.Code = extractCodeWithAI(data)
-			if s.currentMail.Code != "" {
-				log.Printf("从原始内容中提取到验证码: %s", s.currentMail.Code)
-			} else {
-				log.Println("无法从邮件中提取验证码")
+			// 根据Transfer-Encoding进行解码
+			if strings.Contains(transferEncoding, "base64") {
+				htmlContent = decodeBase64Content(htmlContent)
+				log.Printf("成功解码Base64 HTML内容，长度: %d", len(htmlContent))
+			} else if strings.Contains(transferEncoding, "quoted-printable") {
+				// 解码Quoted-Printable内容
+				htmlContent = decodeQuotedPrintable(htmlContent)
+				log.Printf("处理Quoted-Printable HTML内容，长度: %d", len(htmlContent))
 			}
+
+			// 清理和修复HTML内容
+			htmlContent = cleanHtmlContent(htmlContent)
 		}
 	} else {
-		log.Println("未找到或无法解码Base64内容，尝试从原始内容提取")
+		// 尝试通过正则表达式找到HTML部分
+		contentTypeRegex := regexp.MustCompile(`Content-Type: text/html[\s\S]*?\r\n\r\n([\s\S]+?)(?:\r\n-+|$)`)
+		if matches := contentTypeRegex.FindStringSubmatch(data); len(matches) > 1 {
+			htmlContent = matches[1]
+			log.Printf("通过正则表达式找到HTML内容部分，长度: %d", len(htmlContent))
 
-		// 如果没有解码内容，直接从原始邮件中提取
+			// 根据邮件标记决定如何处理
+			if strings.Contains(data, "Content-Transfer-Encoding: base64") {
+				// 解码Base64
+				htmlContent = decodeBase64Content(htmlContent)
+				log.Printf("成功解码Base64 HTML内容，长度: %d", len(htmlContent))
+			} else if strings.Contains(data, "Content-Transfer-Encoding: quoted-printable") {
+				// 解码Quoted-Printable
+				htmlContent = decodeQuotedPrintable(htmlContent)
+				log.Printf("处理Quoted-Printable HTML内容，长度: %d", len(htmlContent))
+			}
+
+			// 清理HTML内容
+			htmlContent = cleanHtmlContent(htmlContent)
+		}
+	}
+
+	// 保存处理后的HTML内容
+	if htmlContent != "" {
+		s.currentMail.HtmlContent = htmlContent
+		log.Printf("成功设置HTML内容，长度: %d", len(htmlContent))
+	}
+
+	// 提取验证码
+	if plainText != "" || htmlContent != "" {
+		// 先从HTML内容中提取验证码
+		if htmlContent != "" {
+			s.currentMail.Code = extractCodeWithAI(htmlContent)
+		}
+
+		// 如果HTML中没有找到，尝试从纯文本内容提取
+		if s.currentMail.Code == "" && plainText != "" {
+			s.currentMail.Code = extractCodeWithAI(plainText)
+		}
+
+		// 如果都没找到，尝试从原始数据提取
+		if s.currentMail.Code == "" {
+			s.currentMail.Code = extractCodeWithAI(data)
+		}
+
+		if s.currentMail.Code != "" {
+			log.Printf("提取到验证码: %s", s.currentMail.Code)
+		} else {
+			log.Println("无法从邮件中提取验证码")
+		}
+	} else {
+		// 直接从原始数据提取验证码
 		s.currentMail.Code = extractCodeWithAI(data)
 		if s.currentMail.Code != "" {
 			log.Printf("从原始内容中提取到验证码: %s", s.currentMail.Code)

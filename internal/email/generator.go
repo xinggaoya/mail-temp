@@ -4,22 +4,22 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"sync"
+	"log"
+
+	"mail-temp/internal/repository"
 )
 
 // EmailGenerator 临时邮箱生成器
 type EmailGenerator struct {
-	domain    string
-	activeBox map[string]bool
-	mu        sync.RWMutex
+	domain  string
+	storage repository.EmailStorage
 }
 
 // NewEmailGenerator 创建新的邮箱生成器
-func NewEmailGenerator(domain string) *EmailGenerator {
+func NewEmailGenerator(domain string, storage repository.EmailStorage) *EmailGenerator {
 	return &EmailGenerator{
-		domain:    domain,
-		activeBox: make(map[string]bool),
-		mu:        sync.RWMutex{},
+		domain:  domain,
+		storage: storage,
 	}
 }
 
@@ -28,9 +28,10 @@ func (g *EmailGenerator) GenerateEmail() string {
 	username := generateRandomString(10)
 	email := fmt.Sprintf("%s@%s", username, g.domain)
 
-	g.mu.Lock()
-	g.activeBox[username] = true
-	g.mu.Unlock()
+	err := g.storage.AddActiveEmail(username)
+	if err != nil {
+		log.Printf("添加活跃邮箱失败: %v", err)
+	}
 
 	return email
 }
@@ -46,18 +47,24 @@ func (g *EmailGenerator) IsValidEmail(email string) bool {
 		}
 	}
 
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-	return g.activeBox[username]
+	active, err := g.storage.IsActiveEmail(username)
+	if err != nil {
+		log.Printf("检查邮箱是否活跃失败: %v", err)
+		return false
+	}
+	return active
 }
 
 // GetActiveEmails 获取所有活跃的邮箱
 func (g *EmailGenerator) GetActiveEmails() []string {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
+	usernames, err := g.storage.GetActiveEmails()
+	if err != nil {
+		log.Printf("获取活跃邮箱列表失败: %v", err)
+		return []string{}
+	}
 
-	emails := make([]string, 0, len(g.activeBox))
-	for username := range g.activeBox {
+	emails := make([]string, 0, len(usernames))
+	for _, username := range usernames {
 		emails = append(emails, fmt.Sprintf("%s@%s", username, g.domain))
 	}
 
@@ -75,11 +82,18 @@ func (g *EmailGenerator) DeleteEmail(email string) bool {
 		}
 	}
 
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	active, err := g.storage.IsActiveEmail(username)
+	if err != nil {
+		log.Printf("检查邮箱是否活跃失败: %v", err)
+		return false
+	}
 
-	if _, exists := g.activeBox[username]; exists {
-		delete(g.activeBox, username)
+	if active {
+		err := g.storage.DeleteActiveEmail(username)
+		if err != nil {
+			log.Printf("删除活跃邮箱失败: %v", err)
+			return false
+		}
 		return true
 	}
 

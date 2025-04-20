@@ -1,16 +1,21 @@
 /* 全局样式 */
 :root {
-    --primary-color: #3498db;
-    --secondary-color: #2980b9;
+    --primary-color: #1E88E5;
+    --secondary-color: #1565C0;
     --success-color: #2ecc71;
     --warning-color: #f39c12;
     --danger-color: #e74c3c;
-    --light-color: #ecf0f1;
+    --info-color: #3498db;
+    --light-color: #f5f7fa;
     --dark-color: #2c3e50;
     --text-color: #333;
     --text-light: #7f8c8d;
-    --border-color: #ddd;
-    --shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    --border-color: #e0e0e0;
+    --shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    --highlight-color: #64B5F6;
+    --header-height: 80px;
+    --controls-height: 110px;
+    --email-header-height: 50px;
 }
 
 * {
@@ -19,11 +24,27 @@
     box-sizing: border-box;
 }
 
+html, body {
+    height: 100%;
+}
+
 body {
     font-family: "Helvetica Neue", Arial, sans-serif;
     line-height: 1.6;
     color: var(--text-color);
     background-color: #f5f7fa;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+#app {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    max-height: 100vh;
+    overflow: hidden;
 }
 
 .container {
@@ -37,19 +58,115 @@ body {
 header {
     background-color: var(--primary-color);
     color: white;
-    padding: 20px 0;
+    padding: 15px 0;
     text-align: center;
     box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+    height: var(--header-height);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+header::before {
+    content: '';
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    width: 200px;
+    height: 200px;
+    background: radial-gradient(circle, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 70%);
+    border-radius: 50%;
+    z-index: 0;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 1;
+}
+
+.logo-icon {
+    font-size: 2.2rem;
+    margin-right: 15px;
+    color: white;
+    background-color: rgba(255, 255, 255, 0.2);
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    animation: pulse 4s infinite ease-in-out;
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(255, 255, 255, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
+    }
+}
+
+.logo-text {
+    text-align: left;
 }
 
 header h1 {
-    font-size: 2rem;
+    font-size: 2.2rem;
     margin-bottom: 5px;
+    letter-spacing: 0.5px;
+    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.highlight {
+    color: var(--highlight-color);
+    font-size: 0.8em;
+    font-weight: 700;
+    vertical-align: super;
+    text-shadow: none;
+    padding: 2px 5px;
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    margin-left: 2px;
+}
+
+.tagline {
+    font-size: 1rem;
+    opacity: 0.9;
+    display: flex;
+    align-items: center;
+}
+
+.tag-icon {
+    margin-right: 5px;
+    font-size: 0.9rem;
 }
 
 /* 主要内容 */
 main {
-    padding: 30px 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
+    max-height: calc(100vh - var(--header-height));
+}
+
+main.container {
+    padding-left: 20px;
+    padding-right: 20px;
+    padding-top: 10px;
+    padding-bottom: 10px;
 }
 
 .email-box {
@@ -57,15 +174,21 @@ main {
     border-radius: 8px;
     box-shadow: var(--shadow);
     overflow: hidden;
-    margin-bottom: 30px;
+    margin-bottom: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - var(--header-height) - 20px);
 }
 
 .email-controls {
-    padding: 20px;
+    padding: 15px;
     border-bottom: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
     gap: 15px;
+    flex-shrink: 0;
+    height: var(--controls-height);
 }
 
 .email-address {
@@ -93,7 +216,11 @@ main {
     border-radius: 4px;
     cursor: pointer;
     font-weight: bold;
-    transition: background-color 0.3s;
+    transition: all 0.2s ease;
+}
+
+.btn i {
+    margin-right: 5px;
 }
 
 .btn-primary {
@@ -103,6 +230,8 @@ main {
 
 .btn-primary:hover {
     background-color: var(--secondary-color);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(30, 136, 229, 0.25);
 }
 
 .btn-secondary {
@@ -111,12 +240,26 @@ main {
 }
 
 .btn-secondary:hover {
-    background-color: #d5d9db;
+    background-color: #e5e9ed;
+    transform: translateY(-2px);
+}
+
+.btn-info {
+    background-color: var(--info-color);
+    color: white;
+}
+
+.btn-info:hover {
+    background-color: #2980b9;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(52, 152, 219, 0.25);
 }
 
 .btn-secondary:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
 }
 
 .btn-copy {
@@ -130,11 +273,16 @@ main {
 }
 
 .btn-copy:hover {
-    background-color: #d5d9db;
+    background-color: #e5e9ed;
 }
 
 .email-content {
-    padding: 20px;
+    padding: 10px 15px;
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - var(--header-height) - var(--controls-height) - 20px);
 }
 
 .email-header {
@@ -142,23 +290,67 @@ main {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 15px;
+    flex-shrink: 0;
+    height: var(--email-header-height);
+}
+
+.email-header h3 {
+    display: flex;
+    align-items: center;
+    color: var(--primary-color);
+}
+
+.email-header h3 i {
+    margin-right: 8px;
 }
 
 .email-count {
     color: var(--text-light);
     font-size: 0.9rem;
+    background-color: var(--light-color);
+    padding: 3px 8px;
+    border-radius: 10px;
 }
 
 .message-list {
     display: flex;
     flex-direction: column;
     gap: 15px;
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+    max-height: calc(100vh - var(--header-height) - var(--controls-height) - var(--email-header-height) - 50px);
 }
 
 .message-item {
     border: 1px solid var(--border-color);
     border-radius: 4px;
     padding: 15px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    display: flex;
+    flex-direction: column;
+}
+
+.message-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+}
+
+.single-message {
+    flex: 0 1 auto;
+    height: auto;
+    max-height: none;
+}
+
+.single-message .message-body {
+    max-height: calc(100vh - var(--header-height) - var(--controls-height) - 220px);
+    min-height: 100px;
+}
+
+@media (min-height: 800px) {
+    .single-message .message-body {
+        max-height: 400px;
+    }
 }
 
 .message-header {
@@ -182,7 +374,7 @@ main {
 }
 
 .verification-code {
-    background-color: #f8f9fa;
+    background-color: rgba(30, 136, 229, 0.1);
     padding: 10px;
     border-radius: 4px;
     margin-bottom: 10px;
@@ -197,12 +389,19 @@ main {
 }
 
 .btn-copy-code {
-    background-color: var(--light-color);
+    background-color: var(--primary-color);
+    color: white;
     border: none;
     padding: 3px 8px;
     border-radius: 4px;
     cursor: pointer;
     font-size: 0.85rem;
+    transition: all 0.2s ease;
+}
+
+.btn-copy-code:hover {
+    background-color: var(--secondary-color);
+    transform: translateY(-1px);
 }
 
 .message-body {
@@ -210,20 +409,47 @@ main {
     color: var(--text-color);
     font-size: 0.95rem;
     line-height: 1.5;
-    max-height: 150px;
     overflow-y: auto;
+    min-height: 50px;
+    max-height: 250px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 10px;
+    margin-top: 5px;
+    background-color: #fafafa;
 }
 
 .no-messages {
     text-align: center;
     padding: 40px 0;
     color: var(--text-light);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.loading-container {
+    text-align: center;
+    padding: 40px 0;
+    color: var(--text-light);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.loading-container p {
+    margin-top: 20px;
+    font-size: 1rem;
 }
 
 .loading-spinner {
     width: 40px;
     height: 40px;
-    border: 4px solid rgba(0, 0, 0, 0.1);
+    border: 4px solid rgba(30, 136, 229, 0.1);
     border-radius: 50%;
     border-top-color: var(--primary-color);
     margin: 20px auto 0;
@@ -233,6 +459,10 @@ main {
 .email-intro {
     padding: 40px 20px;
     text-align: center;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .email-intro h2 {
@@ -244,14 +474,170 @@ main {
     max-width: 600px;
     margin: 0 auto 15px;
     color: var(--text-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-/* 底部样式 */
-footer {
-    background-color: var(--dark-color);
+.email-intro p i {
+    margin-right: 8px;
+    color: var(--primary-color);
+}
+
+/* 弹窗样式 */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    backdrop-filter: blur(3px);
+}
+
+.modal-content {
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: modal-in 0.3s forwards;
+}
+
+@keyframes modal-in {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modal-header {
+    background-color: var(--primary-color);
     color: white;
-    padding: 20px 0;
+    padding: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h3 {
+    display: flex;
+    align-items: center;
+    font-size: 1.2rem;
+}
+
+.modal-header h3 i {
+    margin-right: 8px;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.2rem;
+    cursor: pointer;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.2s;
+}
+
+.modal-close:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.modal-body {
+    padding: 15px;
+    overflow-y: auto;
+    max-height: calc(80vh - 60px);
+}
+
+/* 活跃邮箱列表样式 */
+.active-emails-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.active-email-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    background-color: var(--light-color);
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.active-email-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.active-email-text {
+    flex: 1;
+    font-weight: bold;
+    word-break: break-all;
+}
+
+.active-email-actions {
+    display: flex;
+    gap: 5px;
+}
+
+.btn-select-email, .btn-delete-email {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-select-email {
+    background-color: var(--success-color);
+    color: white;
+}
+
+.btn-select-email:hover {
+    background-color: #27ae60;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 5px rgba(46, 204, 113, 0.3);
+}
+
+.btn-delete-email {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+.btn-delete-email:hover {
+    background-color: #c0392b;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 5px rgba(231, 76, 60, 0.3);
+}
+
+.no-active-emails {
     text-align: center;
+    padding: 30px 0;
+    color: var(--text-light);
 }
 
 /* 通知提示 */
@@ -266,6 +652,7 @@ footer {
     border-radius: 4px;
     opacity: 0;
     transition: all 0.3s;
+    z-index: 1001;
 }
 
 .toast.show {
@@ -282,8 +669,15 @@ footer {
 
 /* 响应式设计 */
 @media (max-width: 768px) {
+    :root {
+        --header-height: 100px;
+        --controls-height: 150px;
+    }
+    
     .email-controls {
         flex-direction: column;
+        height: auto;
+        min-height: var(--controls-height);
     }
     
     .email-address {
@@ -301,9 +695,258 @@ footer {
     
     .message-header {
         flex-direction: column;
+        height: auto;
     }
     
     .message-time {
         margin-top: 5px;
+    }
+    
+    .logo {
+        flex-direction: column;
+    }
+    
+    .logo-icon {
+        margin-right: 0;
+        margin-bottom: 10px;
+    }
+    
+    .logo-text {
+        text-align: center;
+    }
+    
+    .tagline {
+        justify-content: center;
+    }
+    
+    .modal-content {
+        width: 95%;
+        max-height: 90vh;
+    }
+    
+    .modal-body {
+        max-height: calc(90vh - 60px);
+    }
+    
+    .active-email-item {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .active-email-text {
+        margin-bottom: 10px;
+    }
+    
+    .active-email-actions {
+        justify-content: flex-end;
+    }
+}
+
+.message-content {
+    overflow-wrap: break-word;
+}
+
+.message-metadata-hint {
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--text-light);
+    padding: 5px 0 0 0;
+    border-top: 1px dotted var(--border-color);
+    margin-top: 10px;
+}
+
+.message-metadata-hint i {
+    color: var(--info-color);
+}
+
+/* HTML内容样式 */
+.html-content {
+    padding: 10px;
+    background-color: #fff;
+    border-radius: 4px;
+    width: 100%;
+    overflow: auto;
+    line-height: 1.6;
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.html-content img {
+    max-width: 100%;
+    height: auto;
+    display: inline-block;
+    vertical-align: middle;
+    margin: 5px 0;
+}
+
+.html-content table {
+    max-width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0;
+    font-size: inherit;
+    overflow-x: auto;
+    display: block;
+}
+
+.html-content table td, 
+.html-content table th {
+    padding: 5px;
+    border: 1px solid #eee;
+    word-break: break-word;
+}
+
+.html-content a {
+    color: var(--primary-color);
+    text-decoration: none;
+    word-break: break-all;
+}
+
+.html-content a:hover {
+    text-decoration: underline;
+}
+
+.html-content div,
+.html-content span,
+.html-content p,
+.html-content h1,
+.html-content h2,
+.html-content h3,
+.html-content h4,
+.html-content h5,
+.html-content h6 {
+    max-width: 100%;
+    margin-bottom: 10px;
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+.html-content .qmbox {
+    padding: 10px 0;
+}
+
+/* 针对邮件HTML的特殊样式修复 */
+.html-content [style*="="] {
+    border: none !important;
+    font-style: normal !important;
+    text-decoration: none !important;
+}
+
+.html-content [class*="="] {
+    border: none !important;
+    font-style: normal !important;
+    text-decoration: none !important;
+}
+
+/* 修复常见的邮件显示问题 */
+.html-content table {
+    width: auto !important;
+    max-width: 100% !important;
+    margin: 10px 0 !important;
+}
+
+.html-content td {
+    padding: 5px !important;
+    max-width: 100%;
+}
+
+/* 确保内联样式正确显示 */
+.html-content span[style],
+.html-content div[style],
+.html-content td[style],
+.html-content a[style] {
+    display: inline-block !important;
+    max-width: 100% !important;
+}
+
+/* 修复Outlook邮件特有的mj-column样式 */
+.html-content .mj-column-per-100 {
+    width: 100% !important;
+}
+
+/* 修复一些第三方邮件的样式问题 */
+[class*="=3D"],
+[style*="=3D"] {
+    text-decoration: none !important;
+    font-style: normal !important;
+    border: none !important;
+}
+
+/* 确保长文本不会溢出容器 */
+.message-content {
+    overflow-wrap: break-word;
+    word-break: break-word;
+    width: 100%;
+    max-width: 100%;
+}
+
+/* 修复验证码显示样式 */
+.verification-code-display {
+    margin-top: 15px;
+    padding: 10px;
+    background-color: #f5f5f5;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.verification-code-display strong {
+    font-size: 1.2em;
+    color: var(--primary-color);
+    letter-spacing: 1px;
+}
+
+.btn-copy-code {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+}
+
+.btn-copy-code:hover {
+    background-color: var(--primary-hover);
+}
+
+/* 针对多部分邮件样式的修复 */
+.html-content iframe {
+    max-width: 100%;
+    border: none;
+}
+
+.html-content pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-x: auto;
+    max-width: 100%;
+    padding: 10px;
+    background-color: #f9f9f9;
+    border-radius: 4px;
+}
+
+/* 添加针对暗色模式的支持 */
+@media (prefers-color-scheme: dark) {
+    .html-content {
+        background-color: #1e1e1e;
+        color: #e0e0e0;
+    }
+    
+    .html-content a {
+        color: #6b9fff;
+    }
+    
+    .html-content table td,
+    .html-content table th {
+        border-color: #333;
+    }
+    
+    .verification-code-display {
+        background-color: #252525;
+    }
+    
+    .html-content pre {
+        background-color: #252525;
     }
 } 

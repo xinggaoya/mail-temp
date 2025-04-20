@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"mail-temp/config"
+	"mail-temp/internal/repository"
 )
 
 // EmailReceiver 邮件接收器
@@ -13,22 +14,23 @@ type EmailReceiver struct {
 	config      *config.Config
 	generator   *EmailGenerator
 	codePattern *regexp.Regexp
-	mailCache   map[string][]*Mail
+	storage     repository.EmailStorage
 	smtpServer  *SMTPServer
 }
 
 // Mail 存储邮件信息
 type Mail struct {
-	From      string    `json:"from"`
-	To        string    `json:"to"`
-	Subject   string    `json:"subject"`
-	Body      string    `json:"body"`
-	Code      string    `json:"code,omitempty"`
-	Timestamp time.Time `json:"timestamp"`
+	From        string    `json:"from"`
+	To          string    `json:"to"`
+	Subject     string    `json:"subject"`
+	Body        string    `json:"body"`
+	HtmlContent string    `json:"htmlContent,omitempty"` // 处理后的HTML内容
+	Code        string    `json:"code,omitempty"`
+	Timestamp   time.Time `json:"timestamp"`
 }
 
 // NewEmailReceiver 创建邮件接收器
-func NewEmailReceiver(cfg *config.Config, generator *EmailGenerator) (*EmailReceiver, error) {
+func NewEmailReceiver(cfg *config.Config, generator *EmailGenerator, storage repository.EmailStorage) (*EmailReceiver, error) {
 	// 编译验证码匹配正则表达式
 	codePattern, err := regexp.Compile(`\b\d{4,8}\b`) // 匹配4-8位数字作为验证码
 	if err != nil {
@@ -39,7 +41,7 @@ func NewEmailReceiver(cfg *config.Config, generator *EmailGenerator) (*EmailRece
 		config:      cfg,
 		generator:   generator,
 		codePattern: codePattern,
-		mailCache:   make(map[string][]*Mail),
+		storage:     storage,
 	}
 
 	return receiver, nil
@@ -47,7 +49,13 @@ func NewEmailReceiver(cfg *config.Config, generator *EmailGenerator) (*EmailRece
 
 // Connect 启动SMTP服务器
 func (r *EmailReceiver) Connect() error {
-	r.smtpServer = NewSMTPServer(r.config.MailDomain, r.generator)
+	// 使用配置的SMTP端口，默认为25
+	port := 25
+	if r.config != nil && r.config.SMTPPort > 0 {
+		port = r.config.SMTPPort
+	}
+
+	r.smtpServer = NewSMTPServer(r.config.MailDomain, port, r.generator)
 	go func() {
 		if err := r.smtpServer.Start(); err != nil {
 			log.Printf("SMTP服务器启动失败: %v", err)
@@ -78,9 +86,24 @@ func (r *EmailReceiver) StartListening(interval time.Duration) {
 				}
 			}
 
-			// 缓存邮件
-			r.mailCache[username] = append(r.mailCache[username], mail)
-			log.Printf("收到新邮件: From=%s, To=%s, Subject=%s", mail.From, mail.To, mail.Subject)
+			// 转换为存储格式
+			message := &repository.EmailMessage{
+				From:        mail.From,
+				To:          mail.To,
+				Subject:     mail.Subject,
+				Body:        mail.Body,
+				HtmlContent: mail.HtmlContent,
+				Code:        mail.Code,
+				Timestamp:   mail.Timestamp.Format(time.RFC3339),
+			}
+
+			// 存储邮件
+			err := r.storage.SaveEmail(username, message)
+			if err != nil {
+				log.Printf("保存邮件失败: %v", err)
+			} else {
+				log.Printf("收到新邮件: From=%s, To=%s, Subject=%s", mail.From, mail.To, mail.Subject)
+			}
 		}
 	}()
 }
@@ -96,8 +119,34 @@ func (r *EmailReceiver) GetEmails(email string) []*Mail {
 		}
 	}
 
-	// 返回缓存的邮件
-	return r.mailCache[username]
+	// 获取存储的邮件
+	messages, err := r.storage.GetEmails(username)
+	if err != nil {
+		log.Printf("获取邮件失败: %v", err)
+		return []*Mail{}
+	}
+
+	// 转换为API格式
+	mails := make([]*Mail, 0, len(messages))
+	for _, message := range messages {
+		timestamp, err := time.Parse(time.RFC3339, message.Timestamp)
+		if err != nil {
+			timestamp = time.Now() // 解析失败使用当前时间
+		}
+
+		mail := &Mail{
+			From:        message.From,
+			To:          message.To,
+			Subject:     message.Subject,
+			Body:        message.Body,
+			HtmlContent: message.HtmlContent,
+			Code:        message.Code,
+			Timestamp:   timestamp,
+		}
+		mails = append(mails, mail)
+	}
+
+	return mails
 }
 
 // ClearEmails 清除指定邮箱的所有邮件
@@ -111,6 +160,9 @@ func (r *EmailReceiver) ClearEmails(email string) {
 		}
 	}
 
-	// 清除缓存
-	delete(r.mailCache, username)
+	// 清除存储
+	err := r.storage.ClearEmails(username)
+	if err != nil {
+		log.Printf("清除邮件失败: %v", err)
+	}
 }
